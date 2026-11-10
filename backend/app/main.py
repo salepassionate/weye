@@ -61,6 +61,15 @@ class BookingRequest(Stay):
 
 app = FastAPI(title="Weye AI Reservation API", version="0.1.0")
 
+# Allow browser clients on any origin during development.
+# Restrict allowed_origins before any public deployment.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 def get_db():
     # Close database sessions after each request.
     with SessionLocal() as session:

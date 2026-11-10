@@ -31,11 +31,15 @@ services:
       - api
   voice-agent:
     build: ./voice-agent
+    restart: on-failure
     environment:
       LIVEKIT_URL: ${LIVEKIT_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       WEYE_API_URL: http://api:8000
+      WEYE_STT_MODEL: ${WEYE_STT_MODEL:-nova-3}
+      WEYE_LLM_MODEL: ${WEYE_LLM_MODEL:-gpt-4.1-mini}
+      WEYE_TTS_MODEL: ${WEYE_TTS_MODEL:-sonic-2024-10-19}
     depends_on:
       - api
     profiles:

@@ -6,11 +6,12 @@ from uuid import uuid4
 
 import httpx
 from dotenv import load_dotenv
-from livekit.agents import Agent, AgentServer, AgentSession, JobContext, cli, function_tool
+from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli, function_tool
+from livekit.plugins import cartesia, deepgram, openai, silero
 
 load_dotenv()
 API_URL = os.getenv("WEYE_API_URL", "http://localhost:8000")
-server = AgentServer()
+
 
 class HotelAgent(Agent):
     def __init__(self):
@@ -75,18 +76,23 @@ class HotelAgent(Agent):
         except httpx.HTTPError:
             return "Booking outcome unknown. Do not retry with a new key; ask staff to verify."
 
-@server.rtc_session()
+
 async def entrypoint(ctx: JobContext):
-    # Configure streaming speech, language, and synthesis via LiveKit Inference.
-    session = AgentSession(
-        stt=os.getenv("WEYE_STT_MODEL", "deepgram/nova-3"),
-        llm=os.getenv("WEYE_LLM_MODEL", "openai/gpt-4.1-mini"),
-        tts=os.getenv("WEYE_TTS_MODEL", "cartesia/sonic-3"),
-    )
-    await session.start(room=ctx.room, agent=HotelAgent())
+    # Connect to the room first, then start the agent session.
     await ctx.connect()
-    await session.generate_reply(instructions="Greet the guest as Weye and ask how you can help with a reservation.")
+
+    session = AgentSession(
+        stt=deepgram.STT(model=os.getenv("WEYE_STT_MODEL", "nova-3")),
+        llm=openai.LLM(model=os.getenv("WEYE_LLM_MODEL", "gpt-4.1-mini")),
+        tts=cartesia.TTS(model=os.getenv("WEYE_TTS_MODEL", "sonic-2024-10-19")),
+        vad=silero.VAD.load(),
+    )
+
+    await session.start(room=ctx.room, agent=HotelAgent())
+    await session.generate_reply(
+        instructions="Greet the guest as Weye and ask how you can help with a reservation."
+    )
+
 
 if __name__ == "__main__":
-    # Run with: python agent.py dev
-    cli.run_app(server)
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
