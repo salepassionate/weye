@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weye AI | Hotel Reservation Demo</title>
+<style>
+body{font:16px system-ui;background:#0c1425;color:#eaf0ff;max-width:780px;margin:40px auto;padding:20px}
+h1{color:#8bd3ff}.panel{background:#17253c;padding:22px;border-radius:16px;margin:15px 0}
+input,button{font:inherit;padding:11px;border-radius:8px;margin:5px;border:1px solid #58718f}
+input{background:#0b1526;color:white}button{background:#3d9cfa;color:#08172b;cursor:pointer}
+button:disabled{opacity:.5}#log{white-space:pre-wrap;min-height:150px;line-height:1.8}
+label{display:inline-block;margin:8px}small{color:#afc2d8}
+</style>
+</head>
+<body>
+<h1>Weye AI</h1><p>Hotel reservation voice prototype · Ethiopian birr (ETB)</p>
+<div class="panel"><strong>Voice assistant</strong><p id="status">Ready. Click Start voice to speak.</p>
+<button id="start">Start voice</button><button id="stop">Stop speaking</button>
+<p><small>Browser speech recognition is experimental. Chrome/Edge may work; voice recognition may require internet. Text entry always works.</small></p>
+<input id="utterance" placeholder="Type your request..." style="width:65%"><button id="send">Send</button>
+<div id="log" aria-live="polite"></div></div>
+<div class="panel"><h2>Reservation details</h2>
+<label>Check-in <input id="checkin" type="date"></label>
+<label>Check-out <input id="checkout" type="date"></label>
+<label>Guests <input id="guests" type="number" min="1" max="20" value="2" style="width:65px"></label>
+<button id="availability">Check availability</button>
+<div id="rooms"></div>
+<label>Guest name <input id="guest" placeholder="Full name"></label>
+<button id="book" disabled>Confirm selected room</button>
+<p id="result"></p></div>
+<script>
+const $=id=>document.getElementById(id);
+const state={room:null,key:null};
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+const recognition=SpeechRecognition?new SpeechRecognition():null;
+if(recognition){recognition.lang='en-US';recognition.onresult=e=>{const msg=e.results[0][0].transcript;$('utterance').value=msg;handle(msg)};recognition.onerror=e=>$('status').textContent='Speech recognition: '+e.error;}
+else $('start').disabled=true;
+$('start').onclick=()=>{try{recognition.start();$('status').textContent='Listening...'}catch(e){$('status').textContent=e.message}};
+$('stop').onclick=()=>speechSynthesis.cancel();
+function say(message){$('log').textContent+='Weye: '+message+'\n';speechSynthesis.cancel();if('speechSynthesis' in window){const u=new SpeechSynthesisUtterance(message);u.lang='en-US';speechSynthesis.speak(u)}}
+function parseDates(message){const matches=message.match(/\d{4}-\d{2}-\d{2}/g);if(matches?.length>=2){$('checkin').value=matches[0];$('checkout').value=matches[1]}const guests=message.match(/(\d+)\s+(?:guests?|adults?|people)/i);if(guests)$('guests').value=guests[1]}
+async function api(path,payload){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok)throw Error(JSON.stringify(data.detail||data));return data}
+function stay(){return {check_in:$('checkin').value,check_out:$('checkout').value,guests:Number($('guests').value)}}
+async function check(){try{const data=await api('/availability',stay());state.room=null;state.key=null;$('book').disabled=true;$('rooms').replaceChildren();if(!data.rooms.length){say('No rooms are available for those dates.');return}say('I found '+data.rooms.length+' room types. Select a room to proceed.');for(const room of data.rooms){const b=document.createElement('button');b.textContent=room.name+' — '+room.total_price+' ETB total';b.onclick=()=>{state.room=room;state.key=crypto.randomUUID();$('book').disabled=false;say('You selected '+room.name+' for '+room.total_price+' Ethiopian birr. Enter your name and confirm to book.')};$('rooms').append(b)}}catch(e){say('Unable to check availability: '+e.message)}}
+async function book(){if(!state.room||!$('guest').value.trim()){say('Please select a room and enter the guest name.');return}try{const r=await api('/reservations',{...stay(),room_type_id:state.room.room_type_id,guest_name:$('guest').value.trim(),idempotency_key:state.key});$('result').textContent='Confirmed: '+r.reference;say('Your reservation is confirmed. Reference '+r.reference.split('').join(' '));$('book').disabled=true}catch(e){say('I could not confirm the reservation: '+e.message)}}
+function handle(msg){$('log').textContent+='Guest: '+msg+'\n';parseDates(msg);if(/availability|available|book|room|reserve/i.test(msg)){if($('checkin').value&&$('checkout').value)check();else say('Please enter check-in and check-out dates in the form.')}else say('I can help you check room availability and book a room. Enter your stay dates to begin.')}
+$('send').onclick=()=>handle($('utterance').value);
+$('availability').onclick=check;$('book').onclick=book;
+say('Welcome to the Weye hotel reservation demo. Please tell me your dates or enter them below.');
+</script></body></html>
