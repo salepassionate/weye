@@ -75,7 +75,7 @@ class HotelAgent(Agent):
         except httpx.HTTPError:
             return "Booking outcome unknown. Do not retry with a new key; ask staff to verify."
 
-@server.rtc_session(agent_name="weye-reservations")
+@server.rtc_session()
 async def entrypoint(ctx: JobContext):
     # Configure streaming speech, language, and synthesis via LiveKit Inference.
     session = AgentSession(
