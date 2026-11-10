@@ -5,6 +5,8 @@ from os import getenv
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -93,7 +95,9 @@ def book(request: BookingRequest, db: Session = Depends(get_db)):
         if (existing.room_type_id, existing.guest_name, existing.check_in, existing.check_out, existing.guests) != (request.room_type_id, request.guest_name, request.check_in, request.check_out, request.guests):
             raise HTTPException(409, "Idempotency key reused with different booking details")
         return {"reference": existing.reference, "status": existing.status, "total_price": str(existing.total_price), "currency": "ETB"}
-    room = db.get(RoomType, request.room_type_id)
+    # Lock the inventory row in PostgreSQL to serialize concurrent reservations.
+    # SQLite ignores FOR UPDATE; use PostgreSQL for any concurrency testing.
+    room = db.scalar(select(RoomType).where(RoomType.id == request.room_type_id).with_for_update())
     if not room:
         raise HTTPException(404, "Room type not found")
     if request.guests > room.capacity or available_count(db, room, request) < 1:
@@ -111,3 +115,8 @@ def get_reservation(reference: str, db: Session = Depends(get_db)):
     if not reservation:
         raise HTTPException(404, "Reservation not found")
     return {"reference": reservation.reference, "guest_name": reservation.guest_name, "check_in": reservation.check_in, "check_out": reservation.check_out, "status": reservation.status, "total_price": str(reservation.total_price), "currency": "ETB"}
+
+@app.get("/demo", include_in_schema=False)
+def demo():
+    # Serve a standalone browser demo from the backend image.
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
