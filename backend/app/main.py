@@ -7,6 +7,8 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pathlib import Path
+from livekit import api as livekit_api
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -120,3 +122,20 @@ def get_reservation(reference: str, db: Session = Depends(get_db)):
 def demo():
     # Serve a standalone browser demo from the backend image.
     return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+@app.post("/voice/token")
+def create_voice_token():
+    # DEVELOPMENT ONLY: unauthenticated token issuance must not be exposed publicly.
+    key = getenv("LIVEKIT_API_KEY")
+    secret = getenv("LIVEKIT_API_SECRET")
+    url = getenv("LIVEKIT_URL")
+    if not all((key, secret, url)):
+        raise HTTPException(503, "LiveKit credentials not configured on backend")
+    room_name = "weye-demo-" + uuid4().hex
+    participant = "guest-" + uuid4().hex[:12]
+    token = (livekit_api.AccessToken(key, secret)
+             .with_identity(participant)
+             .with_name("Demo guest")
+             .with_grants(livekit_api.VideoGrants(room_join=True, room=room_name, can_publish=True, can_subscribe=True))
+             .to_jwt())
+    return {"token": token, "server_url": url}
