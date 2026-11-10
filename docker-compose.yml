@@ -1,0 +1,24 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://weye:weye_dev_password@db:5432/weye
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: weye
+      POSTGRES_PASSWORD: weye_dev_password
+      POSTGRES_DB: weye
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weye"]
+      interval: 5s
+      retries: 10
+volumes:
+  postgres_data:
